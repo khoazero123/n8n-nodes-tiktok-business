@@ -10,6 +10,8 @@ import type {
 } from 'n8n-workflow';
 import { ApplicationError, NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 import { createHash } from 'crypto';
+import { basename } from 'path';
+import FormData from 'form-data';
 
 export class TiktokBusiness implements INodeType {
 	description: INodeTypeDescription = {
@@ -175,27 +177,23 @@ export class TiktokBusiness implements INodeType {
 										...requestOptions.headers,
 									}
 									// const inputData = this.getInputData();
-									this.logger.info(`baseUrl: ${baseUrl}`);
 									const additionalFields = this.getNodeParameter('additionalFields', {}) as any;
 									const apiVersion = additionalFields.apiVersion;
-									this.logger.info(`apiVersion: ${apiVersion}`);
 									if (apiVersion && apiVersion != '1.3') {
 										requestOptions.baseURL = baseUrl.replace('v1.3', `v${apiVersion}`);
-										this.logger.info(`Set baseURL to: ${requestOptions.baseURL}`);
+										this.logger.debug(`Set baseURL to: ${requestOptions.baseURL}`);
 									}
 
-									const body: any = {
-										advertiser_id: this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string,
-									};
+									const body = new FormData();
+									body.append('advertiser_id', this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string);
 
 									const isBinaryData = this.getNodeParameter('binaryData', false) as boolean;
-									this.logger.info(`isBinaryData: ${isBinaryData}`);
 									if (isBinaryData) {
 										const binaryPropertyName = this.getNodeParameter('binaryPropertyName') as string;
 										if (!binaryPropertyName) {
 											throw new NodeOperationError(this.getNode(), 'Binary property name is required');
 										}
-										this.logger.info(`binaryPropertyName: ${binaryPropertyName}`);
+
 										const binaryData = this.helpers.assertBinaryData(binaryPropertyName);
 										// const binaryData = inputData.binary![binaryPropertyName];
 										if (!binaryData) {
@@ -205,9 +203,6 @@ export class TiktokBusiness implements INodeType {
 										// Convert binary data to buffer correctly
 										// const binaryDataBuffer = Buffer.from(binaryData.data, 'base64');
 										const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(binaryPropertyName);
-
-
-										this.logger.info(`additionalFields: ${JSON.stringify(additionalFields)}`);
 										const fileName = additionalFields.fileName as string;
 
 										const filename = fileName || binaryData.fileName?.toString();
@@ -215,27 +210,25 @@ export class TiktokBusiness implements INodeType {
 											throw new NodeOperationError(this.getNode(), `File name is needed to upload image. Make sure the property that holds the binary data has the file name property set or set it manually in the node using the File Name parameter under Additional Fields.`);
 										}
 
-										this.logger.info(`File Name: ${filename}`);
-										body.file_name = filename;
-										body.upload_type = 'UPLOAD_BY_FILE';
-										requestOptions.headers['Content-Type'] = 'multipart/form-data';
+										body.append('file_name', filename);
+										body.append('upload_type', 'UPLOAD_BY_FILE');
 
 										// Calculate image signature
-										body.image_signature = createHash('md5').update(binaryDataBuffer).digest('hex');
-										this.logger.info(`Image signature: ${body.image_signature}`);
+										const imageSignature = createHash('md5').update(binaryDataBuffer).digest('hex');
+										body.append('image_signature', imageSignature);
 
 										// Set the file data directly as buffer - n8n will handle multipart form data automatically
-										body.image_file = binaryDataBuffer;
-										// body.image_file = {
-										// 	value: binaryDataBuffer,
-										// 	options: {
-										// 		filename: binaryData.fileName,
-										// 		contentType: binaryData.mimeType,
-										// 	},
-										// };
+										body.append('image_file', binaryDataBuffer, {
+											filename: binaryData.fileName,
+											contentType: binaryData.mimeType,
+											knownLength: binaryDataBuffer.length,
+										});
 
 										// Remove json flag and let n8n handle content-type for multipart
-										// requestOptions.json = false;
+										requestOptions.json = false;
+										requestOptions.headers['Content-Length'] = body.getLengthSync();
+										requestOptions.headers['Content-Type'] =
+											`multipart/related; boundary=${body.getBoundary()}`;
 									} else {
 										const fileIdOrUrl = this.getNodeParameter('fileIdOrUrl') as string;
 										if (!fileIdOrUrl) {
@@ -243,11 +236,14 @@ export class TiktokBusiness implements INodeType {
 										}
 
 										if (fileIdOrUrl && fileIdOrUrl.startsWith('http')) {
-											body.upload_type = 'UPLOAD_BY_URL';
-											body.image_url = fileIdOrUrl;
+											const fileName = additionalFields.fileName as string;
+											const filename = fileName || basename(fileIdOrUrl);
+											body.append('upload_type', 'UPLOAD_BY_URL');
+											body.append('image_url', fileIdOrUrl);
+											body.append('file_name', filename);
 										} else {
-											body.upload_type = 'UPLOAD_BY_FILE_ID';
-											body.file_id = fileIdOrUrl;
+											body.append('upload_type', 'UPLOAD_BY_FILE_ID');
+											body.append('file_id', fileIdOrUrl);
 										}
 									}
 									requestOptions.body = body;
@@ -398,7 +394,7 @@ export class TiktokBusiness implements INodeType {
 					},
 				},
 				default: {
-					apiVersion: '1.3',
+					// apiVersion: '1.3', // uncomment will show this field as default
 				},
 				options: [
 					{
@@ -417,6 +413,10 @@ export class TiktokBusiness implements INodeType {
 							{
 								name: '1.3',
 								value: '1.3',
+							},
+							{
+								name: '1.2',
+								value: '1.2',
 							},
 						],
 					},
