@@ -1,10 +1,15 @@
 import type {
 	IExecuteFunctions,
+	IExecuteSingleFunctions,
+	IHttpRequestOptions,
+	ILoadOptionsFunctions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	IRequestOptions,
 } from 'n8n-workflow';
-import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
+import { ApplicationError, NodeConnectionType, NodeOperationError } from 'n8n-workflow';
+import { createHash } from 'crypto';
 
 export class TiktokBusiness implements INodeType {
 	description: INodeTypeDescription = {
@@ -26,12 +31,6 @@ export class TiktokBusiness implements INodeType {
 				required: true,
 			},
 		],
-		requestDefaults: {
-			baseURL: '={{ $credentials.baseUrl }}',
-			headers: {
-				'Access-Token': '={{ $credentials.accessToken }}',
-			},
-		},
 		usableAsTool: true,
 		properties: [
 			{
@@ -75,7 +74,257 @@ export class TiktokBusiness implements INodeType {
 				],
 				default: 'getUserInfo',
 			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['advertiser'],
+					},
+				},
+				options: [
+					{
+						name: 'Get Authorized Ad Accounts',
+						value: 'getAdvertiserInfo',
+						description: 'Get up to date information about a advertiser',
+						action: 'Get advertiser info',
+					},
+				],
+				default: 'getAdvertiserInfo',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['image'],
+					},
+				},
+				options: [
+					{
+						name: 'Upload Image',
+						value: 'uploadImage',
+						description: 'Upload an image to TikTok',
+						action: 'Upload image',
+					},
+					{
+						name: 'List Images',
+						value: 'listImages',
+						description: 'List images in an advertiser',
+						action: 'List images',
+					},
+				],
+				default: 'uploadImage',
+			},
+			{
+				displayName: 'Advertiser',
+				name: 'advertiserId',
+				required: true,
+				type: 'resourceLocator',
+				default: { mode: 'list', value: '' },
+				description: 'The specific location or business associated with the account',
+				displayOptions: { show: { resource: ['image'] } },
+				modes: [
+					{
+						displayName: 'From list',
+						name: 'list',
+						type: 'list',
+						typeOptions: {
+							searchListMethod: 'searchAdvertisers',
+							searchable: false,
+						},
+					},
+					{
+						displayName: 'By ID',
+						name: 'id',
+						type: 'string',
+						hint: 'Enter the advertiser ID',
+						validation: [
+							{
+								type: 'regex',
+								properties: {
+									regex: '[0-9]+',
+									errorMessage: 'The ID must be a number',
+								},
+							},
+						],
+						placeholder: 'e.g. 0123456789',
+					},
+				],
+			},
+			{
+				displayName: 'Binary File',
+				name: 'binaryData',
+				type: 'boolean',
+				default: false,
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'uploadImage',
+						],
+						resource: ['image'],
+					},
+				},
+				description: 'Whether the data to upload should be taken from binary field',
+			},
+			{
+				displayName: 'Input Binary Field',
+				name: 'binaryPropertyName',
+				type: 'string',
+				default: 'data',
+				required: true,
+				hint: 'The name of the input binary field containing the file to be written',
+				displayOptions: {
+					show: {
+						operation: [
+							'uploadImage',
+						],
+						resource: ['image'],
+						binaryData: [true],
+					},
+				},
+				placeholder: '',
+				description: 'Name of the binary property that contains the data to upload',
+			},
+			{
+				displayName: 'File ID or URL',
+				name: 'fileIdOrUrl',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['uploadImage'],
+						resource: ['image'],
+						binaryData: [false],
+					},
+				},
+				description:
+					'Photo to send. Pass a file_id to send a photo that exists on the Telegram servers (recommended), an HTTP URL for Telegram to get a photo from the Internet.',
+			},
+
+			{
+				displayName: 'Page',
+				name: 'page',
+				type: 'number',
+				default: 1,
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'listImages',
+						],
+						resource: ['image'],
+					},
+				},
+				description: 'Page number to list images from',
+			},
+			{
+				displayName: 'Page Size',
+				name: 'pageSize',
+				type: 'number',
+				default: 10,
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'listImages',
+						],
+						resource: ['image'],
+					},
+				},
+				description: 'Page size to list images from',
+			},
+			{
+				displayName: 'Additional Fields',
+				name: 'additionalFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				displayOptions: {
+					show: {
+						operation: [
+							'uploadImage',
+							'listImages',
+						],
+						resource: ['image'],
+					},
+				},
+				default: {},
+				options: [
+					{
+						displayName: 'File Name',
+						name: 'fileName',
+						type: 'string',
+						default: '',
+						displayOptions: {
+							show: {
+								'/operation': [
+									'uploadImage',
+								],
+							},
+						},
+						placeholder: 'image.png',
+					},
+					{
+						displayName: 'Image IDs',
+						name: 'imageIds',
+						type: 'string',
+						default: '',
+						displayOptions: {
+							show: {
+								'/operation': [
+									'listImages',
+								],
+							},
+						},
+						placeholder: '["1234567890", "1234567891"]',
+					},
+				]
+			}
 		],
+	};
+
+	methods = {
+		listSearch: {
+			searchAdvertisers: async function (this: ILoadOptionsFunctions) {
+				const { baseUrl, oauthTokenData, appId, appSecret } = await this.getCredentials<{
+					appId: string;
+					appSecret: string;
+					baseUrl: string;
+					oauthTokenData: {
+						data: {
+							access_token: string;
+							advertiser_ids: string[];
+						};
+					};
+				}>('tiktokBusinessOAuth2Api');
+
+				const response = await this.helpers.request({
+					baseURL: baseUrl,
+					method: 'GET',
+					url: 'oauth2/advertiser/get/',
+					headers: {
+						'Access-Token': oauthTokenData.data.access_token,
+					},
+					qs: {
+						app_id: appId,
+						secret: appSecret,
+					},
+				});
+				const advertisers = JSON.parse(response)?.data?.list || [];
+				return {
+					results: advertisers.map((item: any) => ({
+						name: item.advertiser_name,
+						value: item.advertiser_id,
+					})),
+				};
+			},
+		},
 	};
 
 	// The function below is responsible for actually doing whatever this node
@@ -84,10 +333,11 @@ export class TiktokBusiness implements INodeType {
 	// You can make async calls and use `await`.
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
-		const operation = this.getNodeParameter('operation', 0);
-		const resource = this.getNodeParameter('resource', 0);
+		const returnData: INodeExecutionData[] = [];
 
-		const { baseUrl, oauthTokenData } = await this.getCredentials<{
+		const { baseUrl, oauthTokenData, appId, appSecret } = await this.getCredentials<{
+			appId: string;
+			appSecret: string;
 			baseUrl: string;
 			oauthTokenData: {
 				data: {
@@ -99,49 +349,178 @@ export class TiktokBusiness implements INodeType {
 
 		let item: INodeExecutionData;
 
+		const accessToken = oauthTokenData.data.access_token;
+		if (!accessToken) {
+			throw new ApplicationError('No access token found');
+		}
+
 		// Iterates over all input items and add the key "myString" with the
 		// value the parameter "myString" resolves to.
 		// (This could be a different value for each item in case it contains an expression)
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			item = items[itemIndex];
 			try {
-				item = items[itemIndex];
+
+				const operation = this.getNodeParameter('operation', itemIndex);
+				const resource = this.getNodeParameter('resource', itemIndex);
+				const binaryData = this.getNodeParameter('binaryData', itemIndex, false);
+				const fileIdOrUrl = this.getNodeParameter('fileIdOrUrl', itemIndex, '') as string;
+				this.logger.info(`fileIdOrUrl: ${fileIdOrUrl}`);
+
+				const requestOptions: IRequestOptions = {
+					baseURL: baseUrl,
+					headers: {
+						'Access-Token': accessToken,
+						'content-type': 'application/json; charset=utf-8',
+					},
+					json: true,
+				};
+
 				switch (resource) {
 					case 'user':
 						switch (operation) {
 							case 'getUserInfo':
-								const response = await this.helpers.request({
-									baseURL: baseUrl,
-									method: 'GET',
-									url: 'user/info/',
-									headers: {
-										'Access-Token': oauthTokenData.data.access_token,
-									},
-								});
-								item.json = JSON.parse(response);
+								requestOptions.method = 'GET';
+								requestOptions.url = 'user/info/';
+								const response = await this.helpers.request(requestOptions);
+								returnData.push({ json: response?.data || response });
+								break;
+						}
+						break;
+					case 'advertiser':
+						switch (operation) {
+							case 'getAdvertiserInfo':
+								requestOptions.method = 'GET';
+								requestOptions.url = 'oauth2/advertiser/get/';
+								requestOptions.qs = {
+									app_id: appId,
+									secret: appSecret,
+								};
+								const response = await this.helpers.request(requestOptions);
+								returnData.push(...(response?.data?.list || response?.data || []));
+								break;
+						}
+						break;
+					case 'image':
+
+
+						const advertiserId = encodeURI(
+							this.getNodeParameter('advertiserId', itemIndex, undefined, {
+								extractValue: true,
+							}) as string,
+						);
+						switch (operation) {
+							case 'uploadImage':
+								this.logger.info(`Advertiser ID: ${advertiserId}`);
+
+								requestOptions.method = 'POST';
+								requestOptions.url = 'file/image/ad/upload/';
+								requestOptions.body = {
+									advertiser_id: advertiserId,
+								};
+
+								if (binaryData) {
+									if (!item.binary) {
+										throw new NodeOperationError(this.getNode(), 'Binary data is required', {
+											itemIndex,
+										});
+									}
+									requestOptions.body.upload_type = 'UPLOAD_BY_FILE';
+									requestOptions.headers!['content-type'] = 'multipart/form-data; charset=utf-8';
+
+									const binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0);
+									const binaryData = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
+									const fileName = this.getNodeParameter('additionalFields.fileName', 0, '') as string;
+
+									const filename = fileName || binaryData.fileName?.toString();
+
+									this.logger.info(`File Name: ${filename}`);
+
+									if (!filename) {
+										throw new NodeOperationError(
+											this.getNode(),
+											`File name is needed to ${operation}. Make sure the property that holds the binary data
+										has the file name property set or set it manually in the node using the File Name parameter under
+										Additional Fields.`,
+										);
+									}
+
+									const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(
+										itemIndex,
+										binaryPropertyName,
+									);
+
+									requestOptions.body.file_name = filename;
+									requestOptions.body.image_file = {
+										value: binaryDataBuffer,
+										options: {
+											filename: binaryData.fileName,
+											contentType: binaryData.mimeType,
+										},
+									};
+									requestOptions.body.image_signature = createHash('md5').update(binaryDataBuffer).digest('hex');
+									this.logger.info(`Image Signature: ${requestOptions.body.image_signature}`);
+								} else if (fileIdOrUrl && fileIdOrUrl.startsWith('http')) {
+									requestOptions.body.upload_type = 'UPLOAD_BY_URL';
+									requestOptions.body.image_url = fileIdOrUrl;
+								} else if (fileIdOrUrl) {
+									requestOptions.body.upload_type = 'UPLOAD_BY_FILE_ID';
+									requestOptions.body.file_id = fileIdOrUrl;
+								}
+
+								try {
+									// log requestOptions
+									// this.logger.info(JSON.stringify(requestOptions));
+									const response = await this.helpers.request(requestOptions);
+									this.logger.info(JSON.stringify(response));
+									returnData.push({ json: response?.data || response });
+								} catch (error) {
+									this.logger.error(JSON.stringify(error), {
+										advertiserId,
+									});
+									throw new NodeOperationError(this.getNode(), error, {
+										itemIndex,
+									});
+								}
+								break;
+							case 'listImages':
+								const page = this.getNodeParameter('page', itemIndex, 1);
+								const pageSize = this.getNodeParameter('pageSize', itemIndex, 100);
+								const imageIds = this.getNodeParameter('additionalFields.imageIds', itemIndex, '') as string;
+								this.logger.info(`Advertiser ID: ${advertiserId}`);
+								this.logger.info(`Page: ${page}`);
+								this.logger.info(`Page Size: ${pageSize}`);
+								this.logger.info(`Image IDs: ${imageIds}`);
+								const filtering: any = {};
+								if (imageIds) {
+									filtering.image_ids = JSON.parse(imageIds);
+								}
+
+								requestOptions.method = 'GET';
+								requestOptions.url = 'file/image/ad/search/';
+								requestOptions.qs = {
+									advertiser_id: advertiserId,
+									page: page,
+									page_size: pageSize,
+									filtering: JSON.stringify(filtering),
+								};
+								this.logger.info(JSON.stringify(requestOptions));
+								const response = await this.helpers.request(requestOptions);
+								this.logger.info(JSON.stringify(response));
+								returnData.push({ json: response?.data || response });
 								break;
 						}
 						break;
 				}
 			} catch (error) {
-				// This node should never fail but we want to showcase how
-				// to handle errors.
 				if (this.continueOnFail()) {
-					items.push({ json: this.getInputData(itemIndex)[0].json, error, pairedItem: itemIndex });
-				} else {
-					// Adding `itemIndex` allows other workflows to handle this error
-					if (error.context) {
-						// If the error thrown already contains the context property,
-						// only append the itemIndex
-						error.context.itemIndex = itemIndex;
-						throw error;
-					}
-					throw new NodeOperationError(this.getNode(), error, {
-						itemIndex,
-					});
+					returnData.push({ json: { error: error.message } });
+					continue;
 				}
+				throw error;
 			}
 		}
 
-		return [items];
+		return [returnData];
 	}
 }
