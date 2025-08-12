@@ -44,7 +44,7 @@ export class TiktokBusinessOAuth2Api implements ICredentialType {
 		{
 			displayName: 'Base URL',
 			name: 'baseUrl',
-			type: 'string',
+			type: 'hidden',
 			default: 'https://business-api.tiktok.com/open_api/v1.3',
 			required: true,
 		},

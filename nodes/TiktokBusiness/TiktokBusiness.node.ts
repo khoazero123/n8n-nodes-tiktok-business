@@ -103,21 +103,25 @@ export class TiktokBusiness implements INodeType {
 				options: [
 					{
 						name: 'Get Authorized Ad Accounts',
-						value: 'getAdvertiserInfo',
+						value: 'getAuthorizedAdAccounts',
 						description: 'Get up to date information about a advertiser',
-						action: 'Get advertiser info',
+						action: 'Get authorized ad accounts',
 						routing: {
 							send: {
 								preSend: [async function (this: IExecuteSingleFunctions,
 									requestOptions: IHttpRequestOptions,
 								): Promise<IHttpRequestOptions> {
-									const credentials = await this.getCredentials<{
+									const {clientId, clientSecret, oauthTokenData} = await this.getCredentials<{
 										clientId: string;
 										clientSecret: string;
+										oauthTokenData: {
+											access_token: string;
+										};
 									}>('tiktokBusinessOAuth2Api');
+									// this.logger.debug(`oauthTokenData: ${JSON.stringify(oauthTokenData)}`);
 									requestOptions.qs = {
-										app_id: credentials.clientId,
-										secret: credentials.clientSecret,
+										app_id: clientId,
+										secret: clientSecret,
 									};
 									return requestOptions;
 								}],
@@ -128,8 +132,24 @@ export class TiktokBusiness implements INodeType {
 							},
 						},
 					},
+					{
+						name: 'Get Ad Account Details',
+						value: 'getAdAccountDetails',
+						description: 'Get up to date information about a advertiser',
+						action: 'Get ad account details',
+						routing: {
+							request: {
+								method: 'GET',
+								url: '/advertiser/info/',
+								qs: {
+									advertiser_ids: '={{$parameter["advertiserIds"]}}',
+									fields: '={{$parameter["fields"]}}',
+								},
+							},
+						},
+					},
 				],
-				default: 'getAdvertiserInfo',
+				default: 'getAuthorizedAdAccounts',
 			},
 			{
 				displayName: 'Operation',
@@ -326,6 +346,35 @@ export class TiktokBusiness implements INodeType {
 						placeholder: 'e.g. 0123456789',
 					},
 				],
+			},
+			{
+				displayName: 'Advertiser IDs',
+				name: 'advertiserIds',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['getAdAccountDetails'],
+						resource: ['advertiser'],
+					},
+				},
+				description: 'Advertiser IDs to get details about',
+				placeholder: 'e.g: ["1234567890", "1234567891"]',
+			},
+			{
+				displayName: 'Fields',
+				name: 'fields',
+				type: 'string',
+				default: '[]',
+				displayOptions: {
+					show: {
+						operation: ['getAdAccountDetails'],
+						resource: ['advertiser'],
+					},
+				},
+				description: 'Fields to get details about',
+				placeholder: 'e.g: ["telephone_number", "contacter", "currency", "cellphone_number", "timezone", "advertiser_id", "role", "company", "status", "description", "rejection_reason", "address", "name", "language", "industry", "license_no", "email", "license_url", "country", "balance", "create_time", "display_timezone", "owner_bc_id", "company_name_editable"]',
 			},
 			{
 				displayName: 'Image IDs',
