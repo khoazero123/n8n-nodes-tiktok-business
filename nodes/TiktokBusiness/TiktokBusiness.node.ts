@@ -61,6 +61,10 @@ export class TiktokBusiness implements INodeType {
 						name: 'Image',
 						value: 'image',
 					},
+					{
+						name: 'Creative Tool',
+						value: 'creativeTool',
+					},
 				],
 				default: 'user',
 			},
@@ -318,7 +322,12 @@ export class TiktokBusiness implements INodeType {
 				type: 'resourceLocator',
 				default: { mode: 'list', value: '' },
 				description: 'The specific location or business associated with the account',
-				displayOptions: { show: { resource: ['image'] } },
+				displayOptions: {
+					show: {
+						resource: ['image', 'creativeTool'],
+						// operation: ['uploadImage', 'listImages', 'getInfoAboutImages', 'updateImageName', 'deleteCreativeAssets']
+					}
+				},
 				modes: [
 					{
 						displayName: 'From list',
@@ -347,11 +356,145 @@ export class TiktokBusiness implements INodeType {
 					},
 				],
 			},
+
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['creativeTool'],
+					},
+				},
+				options: [
+					{
+						name: 'Delete Creative Assets',
+						value: 'deleteCreativeAssets',
+						action: 'Delete creative assets',
+						routing: {
+							send: {
+								preSend: [async function (this: IExecuteSingleFunctions,
+									requestOptions: IHttpRequestOptions,
+								): Promise<IHttpRequestOptions> {
+									const advertiserId = this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string;
+									const imageIds = JSON.parse(this.getNodeParameter('imageIds', {}) as string);
+									const videoIds = JSON.parse(this.getNodeParameter('videoIds', {}) as string);
+
+									requestOptions.body = {
+										advertiser_id: advertiserId,
+										image_ids: imageIds,
+										video_ids: videoIds,
+									};
+									return requestOptions;
+								}],
+							},
+							request: {
+								method: 'POST',
+								url: '/creative/asset/delete/',
+							},
+						},
+					},
+					{
+						name: 'Edit An Image',
+						value: 'editAnImage',
+						action: 'Edit an image',
+						routing: {
+							request: {
+								method: 'POST',
+								url: '/creative/image/edit/',
+								body: {
+									advertiser_id: '={{$parameter["advertiserId"]}}',
+									image_id: '={{$parameter["imageId"]}}',
+									edit_method: '={{$parameter["imageEditMethod"]}}',
+									width: '={{$parameter["imageWidth"]}}',
+									height: '={{$parameter["imageHeight"]}}',
+									image_name: '={{$parameter["imageName"]}}',
+								},
+							},
+						},
+					},
+				],
+				default: 'deleteCreativeAssets',
+			},
+			{
+				displayName: 'Image Edit Method',
+				name: 'imageEditMethod',
+				type: 'options',
+				default: 'fix_size',
+				options: [
+					{
+						name: 'Fix Size',
+						value: 'fix_size',
+					},
+					{
+						name: 'Only Gauss Pad',
+						value: 'only_gauss_pad',
+					},
+					{
+						name: 'Gauss Padding Reserve Score',
+						value: 'gauss_padding_reserve_score',
+					},
+				],
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['editAnImage'],
+						resource: ['creativeTool'],
+					},
+				},
+				description: 'Supported methods: fix_size, only_gauss_pad, and gauss_padding_reserve_score. Default value: fix_size.',
+				placeholder: 'e.g: fix_size',
+			},
+			{
+				displayName: 'Image Width',
+				name: 'imageWidth',
+				type: 'number',
+				default: 1080,
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['editAnImage'],
+						resource: ['creativeTool'],
+					},
+				},
+				description: 'The width of the image. Default value: 1080.',
+				placeholder: 'e.g: 1080',
+			},
+			{
+				displayName: 'Image Height',
+				name: 'imageHeight',
+				type: 'number',
+				default: 1920,
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['editAnImage'],
+						resource: ['creativeTool'],
+					},
+				},
+				description: 'The height of the image. Default value: 1920.',
+				placeholder: 'e.g: 1920',
+			},
+			{
+				displayName: 'Image Name',
+				name: 'imageName',
+				type: 'string',
+				default: '',
+				displayOptions: {
+					show: {
+						operation: ['editAnImage'],
+						resource: ['creativeTool'],
+					},
+				},
+				description: 'Image name after editing. If the name is not set, this will be automatically generated.',
+				placeholder: 'e.g: "New Image Name"',
+			},
 			{
 				displayName: 'Advertiser IDs',
 				name: 'advertiserIds',
-				type: 'string',
-				default: '',
+				type: 'json',
+				default: '[]',
 				required: true,
 				displayOptions: {
 					show: {
@@ -365,7 +508,7 @@ export class TiktokBusiness implements INodeType {
 			{
 				displayName: 'Fields',
 				name: 'fields',
-				type: 'string',
+				type: 'json',
 				default: '[]',
 				displayOptions: {
 					show: {
@@ -379,13 +522,26 @@ export class TiktokBusiness implements INodeType {
 			{
 				displayName: 'Image IDs',
 				name: 'imageIds',
-				type: 'string',
-				default: '',
-				required: true,
+				type: 'json',
+				default: '[]',
 				displayOptions: {
 					show: {
-						operation: ['getInfoAboutImages'],
-						resource: ['image'],
+						operation: ['getInfoAboutImages', 'deleteCreativeAssets'],
+						resource: ['image', 'creativeTool'],
+					},
+				},
+				description: 'Image IDs to get info about',
+				placeholder: 'e.g: ["ad-site-i18n-sg/1234567890", "ad-site-i18n-sg/1234567891"]',
+			},
+			{
+				displayName: 'Video IDs',
+				name: 'videoIds',
+				type: 'json',
+				default: '[]',
+				displayOptions: {
+					show: {
+						operation: ['deleteCreativeAssets'],
+						resource: ['creativeTool'],
 					},
 				},
 				description: 'Image IDs to get info about',
@@ -399,8 +555,8 @@ export class TiktokBusiness implements INodeType {
 				required: true,
 				displayOptions: {
 					show: {
-						operation: ['updateImageName'],
-						resource: ['image'],
+						operation: ['updateImageName', 'editAnImage'],
+						resource: ['image', 'creativeTool'],
 					},
 				},
 				description: 'Image ID to update the name of',
@@ -562,8 +718,8 @@ export class TiktokBusiness implements INodeType {
 					{
 						displayName: 'Filtering',
 						name: 'filtering',
-						type: 'string',
-						default: '',
+						type: 'json',
+						default: '{}',
 						displayOptions: {
 							show: {
 								'/operation': [
