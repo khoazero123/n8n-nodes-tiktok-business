@@ -161,6 +161,38 @@ export class TiktokBusiness implements INodeType {
 						},
 					},
 					{
+						name: 'Get Info About Images',
+						value: 'getInfoAboutImages',
+						description: 'Get info about images in an advertiser',
+						action: 'Get info about images',
+						routing: {
+							request: {
+								method: 'GET',
+								url: '/file/image/ad/info/',
+								qs: {
+									advertiser_id: '={{$parameter["advertiserId"]}}',
+									image_ids: '={{$parameter["imageIds"]}}',
+								},
+							},
+						},
+					},
+					{
+						name: 'Update The Name Of An Image',
+						value: 'updateImageName',
+						action: 'Update image name',
+						routing: {
+							request: {
+								method: 'POST',
+								url: '/file/image/ad/update/',
+								body: {
+									advertiser_id: '={{$parameter["advertiserId"]}}',
+									image_id: '={{$parameter["imageId"]}}',
+									file_name: '={{$parameter["fileName"]}}',
+								},
+							},
+						},
+					},
+					{
 						name: 'Upload Image',
 						value: 'uploadImage',
 						description: 'Upload an image to TikTok',
@@ -296,6 +328,51 @@ export class TiktokBusiness implements INodeType {
 				],
 			},
 			{
+				displayName: 'Image IDs',
+				name: 'imageIds',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['getInfoAboutImages'],
+						resource: ['image'],
+					},
+				},
+				description: 'Image IDs to get info about',
+				placeholder: 'e.g: ["ad-site-i18n-sg/1234567890", "ad-site-i18n-sg/1234567891"]',
+			},
+			{
+				displayName: 'Image ID',
+				name: 'imageId',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['updateImageName'],
+						resource: ['image'],
+					},
+				},
+				description: 'Image ID to update the name of',
+				placeholder: 'e.g: ad-site-i18n-sg/1234567890',
+			},
+			{
+				displayName: 'File Name',
+				name: 'fileName',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['updateImageName'],
+						resource: ['image'],
+					},
+				},
+				description: 'New name for the image',
+				placeholder: 'e.g. "New Image Name"',
+			},
+			{
 				displayName: 'Binary File',
 				name: 'binaryData',
 				type: 'boolean',
@@ -346,7 +423,6 @@ export class TiktokBusiness implements INodeType {
 				description:
 					'Photo to send. Pass a file_id to send a photo that exists on the Telegram servers (recommended), an HTTP URL for Telegram to get a photo from the Internet.',
 			},
-
 			{
 				displayName: 'Page',
 				name: 'page',
@@ -446,7 +522,7 @@ export class TiktokBusiness implements INodeType {
 								],
 							},
 						},
-						placeholder: '{"image_ids":["1234567890", "1234567891"]}',
+						placeholder: '{"image_ids":["ad-site-i18n-sg/1234567890", "ad-site-i18n-sg/1234567891"]}',
 					},
 				]
 			}
