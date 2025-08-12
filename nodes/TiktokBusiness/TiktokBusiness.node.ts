@@ -31,6 +31,14 @@ export class TiktokBusiness implements INodeType {
 				required: true,
 			},
 		],
+
+		requestDefaults: {
+			baseURL: '={{$credentials.baseUrl}}',
+			json: true,
+			headers: {
+				'Access-Token': '={{$credentials.oauthTokenData.access_token}}',
+			},
+		},
 		usableAsTool: true,
 		properties: [
 			{
@@ -70,6 +78,12 @@ export class TiktokBusiness implements INodeType {
 						value: 'getUserInfo',
 						description: 'Get up to date information about a user',
 						action: 'Get user info',
+						routing: {
+							request: {
+								method: 'GET',
+								url: '/user/info/',
+							},
+						},
 					},
 				],
 				default: 'getUserInfo',
@@ -90,6 +104,27 @@ export class TiktokBusiness implements INodeType {
 						value: 'getAdvertiserInfo',
 						description: 'Get up to date information about a advertiser',
 						action: 'Get advertiser info',
+						routing: {
+							send: {
+								preSend: [async function (this: IExecuteSingleFunctions,
+									requestOptions: IHttpRequestOptions,
+								): Promise<IHttpRequestOptions> {
+									const credentials = await this.getCredentials<{
+										clientId: string;
+										clientSecret: string;
+									}>('tiktokBusinessOAuth2Api');
+									requestOptions.qs = {
+										app_id: credentials.clientId,
+										secret: credentials.clientSecret,
+									};
+									return requestOptions;
+								}],
+							},
+							request: {
+								method: 'GET',
+								url: '/oauth2/advertiser/get/',
+							},
+						},
 					},
 				],
 				default: 'getAdvertiserInfo',
@@ -106,16 +141,124 @@ export class TiktokBusiness implements INodeType {
 				},
 				options: [
 					{
-						name: 'Upload Image',
-						value: 'uploadImage',
-						description: 'Upload an image to TikTok',
-						action: 'Upload image',
-					},
-					{
 						name: 'List Images',
 						value: 'listImages',
 						description: 'List images in an advertiser',
 						action: 'List images',
+						routing: {
+							request: {
+								method: 'GET',
+								url: '/file/image/ad/search/',
+								qs: {
+									advertiser_id: '={{$parameter["advertiserId"]}}',
+									page: '={{$parameter["page"]}}',
+									page_size: '={{$parameter["pageSize"]}}',
+									filtering: '={{$parameter["filtering"]}}',
+								},
+							},
+						},
+					},
+					{
+						name: 'Upload Image',
+						value: 'uploadImage',
+						description: 'Upload an image to TikTok',
+						action: 'Upload image',
+						routing: {
+							send: {
+								preSend: [async function (this: IExecuteSingleFunctions,
+									requestOptions: IHttpRequestOptions,
+								): Promise<IHttpRequestOptions> {
+									const {baseUrl} = await this.getCredentials<{
+										baseUrl: string;
+									}>('tiktokBusinessOAuth2Api');
+									requestOptions.headers = {
+										...requestOptions.headers,
+									}
+									// const inputData = this.getInputData();
+									this.logger.info(`baseUrl: ${baseUrl}`);
+									const additionalFields = this.getNodeParameter('additionalFields', {}) as any;
+									const apiVersion = additionalFields.apiVersion;
+									this.logger.info(`apiVersion: ${apiVersion}`);
+									if (apiVersion && apiVersion != '1.3') {
+										requestOptions.baseURL = baseUrl.replace('v1.3', `v${apiVersion}`);
+										this.logger.info(`Set baseURL to: ${requestOptions.baseURL}`);
+									}
+
+									const body: any = {
+										advertiser_id: this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string,
+									};
+
+									const isBinaryData = this.getNodeParameter('binaryData', false) as boolean;
+									this.logger.info(`isBinaryData: ${isBinaryData}`);
+									if (isBinaryData) {
+										const binaryPropertyName = this.getNodeParameter('binaryPropertyName') as string;
+										if (!binaryPropertyName) {
+											throw new NodeOperationError(this.getNode(), 'Binary property name is required');
+										}
+										this.logger.info(`binaryPropertyName: ${binaryPropertyName}`);
+										const binaryData = this.helpers.assertBinaryData(binaryPropertyName);
+										// const binaryData = inputData.binary![binaryPropertyName];
+										if (!binaryData) {
+											throw new NodeOperationError(this.getNode(), 'Binary data is required');
+										}
+
+										// Convert binary data to buffer correctly
+										// const binaryDataBuffer = Buffer.from(binaryData.data, 'base64');
+										const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(binaryPropertyName);
+
+
+										this.logger.info(`additionalFields: ${JSON.stringify(additionalFields)}`);
+										const fileName = additionalFields.fileName as string;
+
+										const filename = fileName || binaryData.fileName?.toString();
+										if (!filename) {
+											throw new NodeOperationError(this.getNode(), `File name is needed to upload image. Make sure the property that holds the binary data has the file name property set or set it manually in the node using the File Name parameter under Additional Fields.`);
+										}
+
+										this.logger.info(`File Name: ${filename}`);
+										body.file_name = filename;
+										body.upload_type = 'UPLOAD_BY_FILE';
+										requestOptions.headers['Content-Type'] = 'multipart/form-data';
+
+										// Calculate image signature
+										body.image_signature = createHash('md5').update(binaryDataBuffer).digest('hex');
+										this.logger.info(`Image signature: ${body.image_signature}`);
+
+										// Set the file data directly as buffer - n8n will handle multipart form data automatically
+										body.image_file = binaryDataBuffer;
+										// body.image_file = {
+										// 	value: binaryDataBuffer,
+										// 	options: {
+										// 		filename: binaryData.fileName,
+										// 		contentType: binaryData.mimeType,
+										// 	},
+										// };
+
+										// Remove json flag and let n8n handle content-type for multipart
+										// requestOptions.json = false;
+									} else {
+										const fileIdOrUrl = this.getNodeParameter('fileIdOrUrl') as string;
+										if (!fileIdOrUrl) {
+											throw new NodeOperationError(this.getNode(), 'File ID or URL is required');
+										}
+
+										if (fileIdOrUrl && fileIdOrUrl.startsWith('http')) {
+											body.upload_type = 'UPLOAD_BY_URL';
+											body.image_url = fileIdOrUrl;
+										} else {
+											body.upload_type = 'UPLOAD_BY_FILE_ID';
+											body.file_id = fileIdOrUrl;
+										}
+									}
+									requestOptions.body = body;
+									return requestOptions;
+								}],
+							},
+							request: {
+								method: 'POST',
+								url: '/file/image/ad/upload/',
+							},
+						},
 					},
 				],
 				default: 'uploadImage',
@@ -254,8 +397,29 @@ export class TiktokBusiness implements INodeType {
 						resource: ['image'],
 					},
 				},
-				default: {},
+				default: {
+					apiVersion: '1.3',
+				},
 				options: [
+					{
+						displayName: 'API Version',
+						name: 'apiVersion',
+						type: 'options',
+						default: '1.3',
+						displayOptions: {
+							show: {
+								'/operation': [
+									'uploadImage',
+								],
+							},
+						},
+						options: [
+							{
+								name: '1.3',
+								value: '1.3',
+							},
+						],
+					},
 					{
 						displayName: 'File Name',
 						name: 'fileName',
@@ -271,8 +435,8 @@ export class TiktokBusiness implements INodeType {
 						placeholder: 'image.png',
 					},
 					{
-						displayName: 'Image IDs',
-						name: 'imageIds',
+						displayName: 'Filtering',
+						name: 'filtering',
 						type: 'string',
 						default: '',
 						displayOptions: {
@@ -282,7 +446,7 @@ export class TiktokBusiness implements INodeType {
 								],
 							},
 						},
-						placeholder: '["1234567890", "1234567891"]',
+						placeholder: '{"image_ids":["1234567890", "1234567891"]}',
 					},
 				]
 			}
@@ -325,204 +489,4 @@ export class TiktokBusiness implements INodeType {
 			},
 		},
 	};
-
-	// The function below is responsible for actually doing whatever this node
-	// is supposed to do. In this case, we're just appending the `myString` property
-	// with whatever the user has entered.
-	// You can make async calls and use `await`.
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const returnData: INodeExecutionData[] = [];
-
-		const credentials = await this.getCredentials<{
-			clientId: string;
-			clientSecret: string;
-			baseUrl: string;
-			oauthTokenData: {
-				access_token: string;
-				advertiser_ids: string[];
-				scope: number[];
-			};
-		}>('tiktokBusinessOAuth2Api');
-
-		const { baseUrl, oauthTokenData, clientId, clientSecret } = credentials;
-
-		let item: INodeExecutionData;
-
-		const accessToken = oauthTokenData.access_token;
-		if (!accessToken) {
-			this.logger.info(`Credentials: ${JSON.stringify(credentials)}`);
-			throw new ApplicationError('No access token found');
-		}
-
-		// Iterates over all input items and add the key "myString" with the
-		// value the parameter "myString" resolves to.
-		// (This could be a different value for each item in case it contains an expression)
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-			item = items[itemIndex];
-			try {
-
-				const operation = this.getNodeParameter('operation', itemIndex);
-				const resource = this.getNodeParameter('resource', itemIndex);
-				const binaryData = this.getNodeParameter('binaryData', itemIndex, false);
-				const fileIdOrUrl = this.getNodeParameter('fileIdOrUrl', itemIndex, '') as string;
-				this.logger.info(`fileIdOrUrl: ${fileIdOrUrl}`);
-
-				const requestOptions: IRequestOptions = {
-					baseURL: baseUrl,
-					headers: {
-						'Access-Token': accessToken,
-						'content-type': 'application/json; charset=utf-8',
-					},
-					json: true,
-				};
-
-				switch (resource) {
-					case 'user':
-						switch (operation) {
-							case 'getUserInfo':
-								this.logger.info(`Client ID: ${clientId}`);
-								requestOptions.method = 'GET';
-								requestOptions.url = 'user/info/';
-								const response = await this.helpers.request(requestOptions);
-								returnData.push({ json: response?.data || response });
-								break;
-						}
-						break;
-					case 'advertiser':
-						switch (operation) {
-							case 'getAdvertiserInfo':
-								requestOptions.method = 'GET';
-								requestOptions.url = 'oauth2/advertiser/get/';
-								requestOptions.qs = {
-									app_id: clientId,
-									secret: clientSecret,
-								};
-								const response = await this.helpers.request(requestOptions);
-								returnData.push(...(response?.data?.list || response?.data || []));
-								break;
-						}
-						break;
-					case 'image':
-
-
-						const advertiserId = encodeURI(
-							this.getNodeParameter('advertiserId', itemIndex, undefined, {
-								extractValue: true,
-							}) as string,
-						);
-						switch (operation) {
-							case 'uploadImage':
-								this.logger.info(`Advertiser ID: ${advertiserId}`);
-
-								requestOptions.method = 'POST';
-								requestOptions.url = 'file/image/ad/upload/';
-								requestOptions.body = {
-									advertiser_id: advertiserId,
-								};
-
-								if (binaryData) {
-									if (!item.binary) {
-										throw new NodeOperationError(this.getNode(), 'Binary data is required', {
-											itemIndex,
-										});
-									}
-									requestOptions.body.upload_type = 'UPLOAD_BY_FILE';
-									requestOptions.headers!['content-type'] = 'multipart/form-data; charset=utf-8';
-
-									const binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0);
-									const binaryData = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
-									const fileName = this.getNodeParameter('additionalFields.fileName', 0, '') as string;
-
-									const filename = fileName || binaryData.fileName?.toString();
-
-									this.logger.info(`File Name: ${filename}`);
-
-									if (!filename) {
-										throw new NodeOperationError(
-											this.getNode(),
-											`File name is needed to ${operation}. Make sure the property that holds the binary data
-										has the file name property set or set it manually in the node using the File Name parameter under
-										Additional Fields.`,
-										);
-									}
-
-									const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(
-										itemIndex,
-										binaryPropertyName,
-									);
-
-									requestOptions.body.file_name = filename;
-									requestOptions.body.image_file = {
-										value: binaryDataBuffer,
-										options: {
-											filename: binaryData.fileName,
-											contentType: binaryData.mimeType,
-										},
-									};
-									requestOptions.body.image_signature = createHash('md5').update(binaryDataBuffer).digest('hex');
-									this.logger.info(`Image Signature: ${requestOptions.body.image_signature}`);
-								} else if (fileIdOrUrl && fileIdOrUrl.startsWith('http')) {
-									requestOptions.body.upload_type = 'UPLOAD_BY_URL';
-									requestOptions.body.image_url = fileIdOrUrl;
-								} else if (fileIdOrUrl) {
-									requestOptions.body.upload_type = 'UPLOAD_BY_FILE_ID';
-									requestOptions.body.file_id = fileIdOrUrl;
-								}
-
-								try {
-									// log requestOptions
-									// this.logger.info(JSON.stringify(requestOptions));
-									const response = await this.helpers.request(requestOptions);
-									this.logger.info(JSON.stringify(response));
-									returnData.push({ json: response?.data || response });
-								} catch (error) {
-									this.logger.error(JSON.stringify(error), {
-										advertiserId,
-									});
-									throw new NodeOperationError(this.getNode(), error, {
-										itemIndex,
-									});
-								}
-								break;
-							case 'listImages':
-								const page = this.getNodeParameter('page', itemIndex, 1);
-								const pageSize = this.getNodeParameter('pageSize', itemIndex, 100);
-								const imageIds = this.getNodeParameter('additionalFields.imageIds', itemIndex, '') as string;
-								this.logger.info(`Advertiser ID: ${advertiserId}`);
-								this.logger.info(`Page: ${page}`);
-								this.logger.info(`Page Size: ${pageSize}`);
-								this.logger.info(`Image IDs: ${imageIds}`);
-								const filtering: any = {};
-								if (imageIds) {
-									filtering.image_ids = JSON.parse(imageIds);
-								}
-
-								requestOptions.method = 'GET';
-								requestOptions.url = 'file/image/ad/search/';
-								requestOptions.qs = {
-									advertiser_id: advertiserId,
-									page: page,
-									page_size: pageSize,
-									filtering: JSON.stringify(filtering),
-								};
-								this.logger.info(JSON.stringify(requestOptions));
-								const response = await this.helpers.request(requestOptions);
-								this.logger.info(JSON.stringify(response));
-								returnData.push({ json: response?.data || response });
-								break;
-						}
-						break;
-				}
-			} catch (error) {
-				if (this.continueOnFail()) {
-					returnData.push({ json: { error: error.message } });
-					continue;
-				}
-				throw error;
-			}
-		}
-
-		return [returnData];
-	}
 }
