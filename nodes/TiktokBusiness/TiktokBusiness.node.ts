@@ -292,15 +292,14 @@ export class TiktokBusiness implements INodeType {
 	methods = {
 		listSearch: {
 			searchAdvertisers: async function (this: ILoadOptionsFunctions) {
-				const { baseUrl, oauthTokenData, appId, appSecret } = await this.getCredentials<{
-					appId: string;
-					appSecret: string;
+				const { baseUrl, oauthTokenData, clientId, clientSecret } = await this.getCredentials<{
+					clientId: string;
+					clientSecret: string;
 					baseUrl: string;
 					oauthTokenData: {
-						data: {
-							access_token: string;
-							advertiser_ids: string[];
-						};
+						access_token: string;
+						advertiser_ids: string[];
+						scope: number[];
 					};
 				}>('tiktokBusinessOAuth2Api');
 
@@ -309,11 +308,11 @@ export class TiktokBusiness implements INodeType {
 					method: 'GET',
 					url: 'oauth2/advertiser/get/',
 					headers: {
-						'Access-Token': oauthTokenData.data.access_token,
+						'Access-Token': oauthTokenData.access_token,
 					},
 					qs: {
-						app_id: appId,
-						secret: appSecret,
+						app_id: clientId,
+						secret: clientSecret,
 					},
 				});
 				const advertisers = JSON.parse(response)?.data?.list || [];
@@ -335,22 +334,24 @@ export class TiktokBusiness implements INodeType {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 
-		const { baseUrl, oauthTokenData, appId, appSecret } = await this.getCredentials<{
-			appId: string;
-			appSecret: string;
+		const credentials = await this.getCredentials<{
+			clientId: string;
+			clientSecret: string;
 			baseUrl: string;
 			oauthTokenData: {
-				data: {
-					access_token: string;
-					advertiser_ids: string[];
-				};
+				access_token: string;
+				advertiser_ids: string[];
+				scope: number[];
 			};
 		}>('tiktokBusinessOAuth2Api');
 
+		const { baseUrl, oauthTokenData, clientId, clientSecret } = credentials;
+
 		let item: INodeExecutionData;
 
-		const accessToken = oauthTokenData.data.access_token;
+		const accessToken = oauthTokenData.access_token;
 		if (!accessToken) {
+			this.logger.info(`Credentials: ${JSON.stringify(credentials)}`);
 			throw new ApplicationError('No access token found');
 		}
 
@@ -380,6 +381,7 @@ export class TiktokBusiness implements INodeType {
 					case 'user':
 						switch (operation) {
 							case 'getUserInfo':
+								this.logger.info(`Client ID: ${clientId}`);
 								requestOptions.method = 'GET';
 								requestOptions.url = 'user/info/';
 								const response = await this.helpers.request(requestOptions);
@@ -393,8 +395,8 @@ export class TiktokBusiness implements INodeType {
 								requestOptions.method = 'GET';
 								requestOptions.url = 'oauth2/advertiser/get/';
 								requestOptions.qs = {
-									app_id: appId,
-									secret: appSecret,
+									app_id: clientId,
+									secret: clientSecret,
 								};
 								const response = await this.helpers.request(requestOptions);
 								returnData.push(...(response?.data?.list || response?.data || []));

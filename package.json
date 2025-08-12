@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-tiktok-business",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "n8n community node for interacting with TikTok",
   "keywords": [
     "n8n-community-node-package"
@@ -24,7 +24,8 @@
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
     "lint": "eslint nodes credentials package.json",
-    "lintfix": "eslint nodes credentials package.json --fix"
+    "lintfix": "eslint nodes credentials package.json --fix",
+    "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes credentials package.json"
   },
   "files": [
     "dist"
@@ -32,10 +33,10 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "credentials/TiktokBusinessOAuth2Api.credentials.ts"
+      "dist/credentials/TiktokBusinessOAuth2Api.credentials.js"
     ],
     "nodes": [
-      "nodes/TiktokBusiness/TiktokBusiness.node.ts"
+      "dist/nodes/TiktokBusiness/TiktokBusiness.node.js"
     ]
   },
   "devDependencies": {
@@ -49,9 +50,5 @@
   },
   "peerDependencies": {
     "n8n-workflow": "*"
-  },
-  "dependencies": {
-    "n8n-workflow": "^1.82.0"
-  },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  }
 }
