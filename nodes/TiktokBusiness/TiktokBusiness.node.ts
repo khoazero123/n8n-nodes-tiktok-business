@@ -3,6 +3,7 @@ import type {
 	IExecuteSingleFunctions,
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
+	IN8nHttpFullResponse,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -31,9 +32,23 @@ export class TiktokBusiness implements INodeType {
 			{
 				name: 'tiktokBusinessOAuth2Api',
 				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['oAuth2'],
+					},
+				},
+			},
+			{
+				name: 'tiktokBusinessEasyAuthOAuth2Api',
+				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['easyAuth'],
+					},
+				},
 			},
 		],
-
+		usableAsTool: true,
 		requestDefaults: {
 			baseURL: '={{$credentials.baseUrl}}',
 			json: true,
@@ -41,8 +56,34 @@ export class TiktokBusiness implements INodeType {
 				'Access-Token': '={{$credentials.oauthTokenData.access_token}}',
 			},
 		},
-		usableAsTool: true,
 		properties: [
+			{
+				displayName: 'Authentication',
+				name: 'authentication',
+				type: 'options',
+				options: [
+					{
+						name: 'OAuth2',
+						value: 'oAuth2',
+					},
+					{
+						name: 'Easy Auth',
+						value: 'easyAuth',
+					},
+				],
+				default: 'oAuth2',
+			},
+			{
+				displayName: 'Credentials',
+				name: 'credentials',
+				type: 'credentials',
+				default: '',
+				displayOptions: {
+					show: {
+						authentication: ['oAuth2', 'easyAuth'],
+					},
+				},
+			},
 			{
 				displayName: 'Resource',
 				name: 'resource',
@@ -115,24 +156,64 @@ export class TiktokBusiness implements INodeType {
 								preSend: [async function (this: IExecuteSingleFunctions,
 									requestOptions: IHttpRequestOptions,
 								): Promise<IHttpRequestOptions> {
-									const {clientId, clientSecret, oauthTokenData} = await this.getCredentials<{
+									const authentication = this.getNodeParameter('authentication', 0);
+									const credentialType = authentication === 'easyAuth' ? 'tiktokBusinessEasyAuthOAuth2Api' : 'tiktokBusinessOAuth2Api';
+									const {clientId, clientSecret, advertiserGetUrl, oauthTokenData} = await this.getCredentials<{
 										clientId: string;
 										clientSecret: string;
+										advertiserGetUrl: string;
 										oauthTokenData: {
 											access_token: string;
+											advertiser_ids: string[];
 										};
-									}>('tiktokBusinessOAuth2Api');
+									}>(credentialType);
 									// this.logger.debug(`oauthTokenData: ${JSON.stringify(oauthTokenData)}`);
-									requestOptions.qs = {
-										app_id: clientId,
-										secret: clientSecret,
-									};
+									if (authentication === 'oAuth2') {
+										requestOptions.qs = {
+											app_id: clientId,
+											secret: clientSecret,
+										};
+										// this.logger.debug(`oauthTokenData.advertiser_ids: ${JSON.stringify(oauthTokenData.advertiser_ids)}`);
+									} else {
+										// oauthTokenData.advertiser_ids are not correct
+										// requestOptions.url = '/advertiser/info/';
+										// requestOptions.qs = {
+										// 	advertiser_ids: `[${oauthTokenData.advertiser_ids.map((item: string) => `"${item}"`).join(',')}]`,
+										// };
+										requestOptions.url = advertiserGetUrl;
+										// this.logger.debug(`requestOptions: ${JSON.stringify(requestOptions)}`);
+									}
 									return requestOptions;
 								}],
 							},
 							request: {
 								method: 'GET',
 								url: '/oauth2/advertiser/get/',
+							},
+							output: {
+								postReceive: [
+									/* async function (
+										this: IExecuteSingleFunctions,
+										items,
+										response: IN8nHttpFullResponse,
+									): Promise<INodeExecutionData[]> {
+										const authentication = this.getNodeParameter('authentication', 0);
+										if (authentication === 'easyAuth') {
+											const {oauthTokenData} = await this.getCredentials<{
+												oauthTokenData: {
+													advertiser_ids: string[];
+												};
+											}>('tiktokBusinessEasyAuthOAuth2Api');
+											return this.helpers.returnJsonArray(oauthTokenData.advertiser_ids.map((item: string) => ({
+												advertiser_id: item,
+												advertiser_name: item,
+											})));
+										}
+										// this.logger.debug(`response: ${JSON.stringify(response)}`);
+										const data = response.body as any;
+										return this.helpers.returnJsonArray(data?.data?.list || data?.data || data || []);
+									} */
+								],
 							},
 						},
 					},
@@ -226,9 +307,11 @@ export class TiktokBusiness implements INodeType {
 								preSend: [async function (this: IExecuteSingleFunctions,
 									requestOptions: IHttpRequestOptions,
 								): Promise<IHttpRequestOptions> {
+									const authentication = this.getNodeParameter('authentication', 0);
+									const credentialType = authentication === 'easyAuth' ? 'tiktokBusinessEasyAuthOAuth2Api' : 'tiktokBusinessOAuth2Api';
 									const {baseUrl} = await this.getCredentials<{
 										baseUrl: string;
-									}>('tiktokBusinessOAuth2Api');
+									}>(credentialType);
 									requestOptions.headers = {
 										...requestOptions.headers,
 									}
@@ -737,21 +820,34 @@ export class TiktokBusiness implements INodeType {
 	methods = {
 		listSearch: {
 			searchAdvertisers: async function (this: ILoadOptionsFunctions) {
-				const { baseUrl, oauthTokenData, clientId, clientSecret } = await this.getCredentials<{
+				const authentication = this.getNodeParameter('authentication', 0);
+				const credentialType = authentication === 'easyAuth' ? 'tiktokBusinessEasyAuthOAuth2Api' : 'tiktokBusinessOAuth2Api';
+				const { baseUrl, oauthTokenData, clientId, clientSecret, advertiserGetUrl } = await this.getCredentials<{
 					clientId: string;
 					clientSecret: string;
 					baseUrl: string;
+					advertiserGetUrl: string;
 					oauthTokenData: {
 						access_token: string;
 						advertiser_ids: string[];
 						scope: number[];
 					};
-				}>('tiktokBusinessOAuth2Api');
+				}>(credentialType);
+
+				/* // TODO: uncomment this when the oauthTokenData.advertiser_ids is correct
+				if (authentication === 'easyAuth') {
+					return {
+						results: oauthTokenData.advertiser_ids.map((item: string) => ({
+							name: item,
+							value: item,
+						})),
+					};
+				} */
 
 				const response = await this.helpers.request({
 					baseURL: baseUrl,
 					method: 'GET',
-					url: 'oauth2/advertiser/get/',
+					url: authentication === 'easyAuth' ? advertiserGetUrl : 'oauth2/advertiser/get/',
 					headers: {
 						'Access-Token': oauthTokenData.access_token,
 					},
@@ -770,4 +866,9 @@ export class TiktokBusiness implements INodeType {
 			},
 		},
 	};
+
+	/* async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+	  const authentication = this.getNodeParameter('authentication', 0);
+		return [];
+	} */
 }
