@@ -29,6 +29,9 @@ export class TiktokBusinessCookieApi implements ICredentialType {
 			displayName: 'Session Ads ID',
 			name: 'sessionId',
 			type: 'string',
+			typeOptions: {
+				password: true,
+			},
 			required: true,
 			default: '',
 		},
