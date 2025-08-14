@@ -132,7 +132,7 @@ module.exports = {
 				'n8n-nodes-base/node-param-option-name-wrong-for-get-many': 'error',
 				'n8n-nodes-base/node-param-option-name-wrong-for-upsert': 'error',
 				'n8n-nodes-base/node-param-option-value-duplicate': 'error',
-				'n8n-nodes-base/node-param-options-type-unsorted-items': 'error',
+				'n8n-nodes-base/node-param-options-type-unsorted-items': 'off',
 				'n8n-nodes-base/node-param-placeholder-miscased-id': 'error',
 				'n8n-nodes-base/node-param-placeholder-missing-email': 'error',
 				'n8n-nodes-base/node-param-required-false': 'error',

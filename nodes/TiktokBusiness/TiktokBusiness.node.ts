@@ -14,6 +14,14 @@ import { createHash } from 'crypto';
 import { basename } from 'path';
 import FormData from 'form-data';
 
+type AuthenticationType = 'oAuth2' | 'easyAuth' | 'cookie';
+
+const credentialByAuthentication: Record<AuthenticationType, string> = {
+	oAuth2: 'tiktokBusinessOAuth2Api',
+	easyAuth: 'tiktokBusinessEasyAuthOAuth2Api',
+	cookie: 'tiktokBusinessCookieApi',
+};
+
 export class TiktokBusiness implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Tiktok Business',
@@ -47,6 +55,15 @@ export class TiktokBusiness implements INodeType {
 					},
 				},
 			},
+			{
+				name: 'tiktokBusinessCookieApi',
+				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['cookie'],
+					},
+				},
+			},
 		],
 		usableAsTool: true,
 		requestDefaults: {
@@ -70,6 +87,10 @@ export class TiktokBusiness implements INodeType {
 						name: 'Easy Auth',
 						value: 'easyAuth',
 					},
+					{
+						name: 'Cookie',
+						value: 'cookie',
+					},
 				],
 				default: 'oAuth2',
 			},
@@ -80,7 +101,7 @@ export class TiktokBusiness implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
-						authentication: ['oAuth2', 'easyAuth'],
+						authentication: ['oAuth2', 'easyAuth', 'cookie'],
 					},
 				},
 			},
@@ -117,6 +138,7 @@ export class TiktokBusiness implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['user'],
+						authentication: ['oAuth2', 'easyAuth', 'cookie'],
 					},
 				},
 				options: [
@@ -126,6 +148,17 @@ export class TiktokBusiness implements INodeType {
 						description: 'Get up to date information about a user',
 						action: 'Get user info',
 						routing: {
+							send: {
+								preSend: [async function (this: IExecuteSingleFunctions,
+									requestOptions: IHttpRequestOptions,
+								): Promise<IHttpRequestOptions> {
+									const authentication = this.getNodeParameter('authentication', 0) as AuthenticationType;
+									if (authentication === 'cookie') {
+										requestOptions.url = 'https://ads.tiktok.com/passport/web/account/info/';
+									}
+									return requestOptions;
+								}],
+							},
 							request: {
 								method: 'GET',
 								url: '/user/info/',
@@ -143,6 +176,7 @@ export class TiktokBusiness implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['advertiser'],
+						authentication: ['oAuth2', 'easyAuth'],
 					},
 				},
 				options: [
@@ -253,6 +287,42 @@ export class TiktokBusiness implements INodeType {
 						description: 'List images in an advertiser',
 						action: 'List images',
 						routing: {
+							send: {
+								preSend: [async function (this: IExecuteSingleFunctions,
+									requestOptions: IHttpRequestOptions,
+								): Promise<IHttpRequestOptions> {
+									const authentication = this.getNodeParameter('authentication', 0) as AuthenticationType;
+									if (authentication === 'cookie') {
+										const credentialType = credentialByAuthentication[authentication];
+										const {csrfToken, sessionId} = await this.getCredentials<{
+											csrfToken: string;
+											sessionId: string;
+										}>(credentialType);
+										requestOptions.method = 'POST';
+										requestOptions.headers = {
+											...requestOptions.headers,
+											'x-csrftoken': csrfToken,
+											'Cookie': `csrftoken=${csrfToken}; sessionid_ss_ads=${sessionId};`,
+										};
+										const advertiserId = this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string;
+										requestOptions.baseURL = undefined;
+										requestOptions.url = 'https://ads.tiktok.com/mi/api/v4/i18n/creation/material/list/';
+										requestOptions.qs = {
+											aadvid: advertiserId,
+										};
+										requestOptions.body = {
+											page: this.getNodeParameter('page', undefined, { extractValue: true }) as number,
+											limit: this.getNodeParameter('pageSize', undefined, { extractValue: true }) as number,
+											item_source: 0,
+											sort_order: 1,
+											sort_type: 1,
+											material_type: 2,
+										};
+										this.logger.debug(`requestOptions: ${JSON.stringify(requestOptions)}`);
+									}
+									return requestOptions;
+								}],
+							},
 							request: {
 								method: 'GET',
 								url: '/file/image/ad/search/',
@@ -271,6 +341,17 @@ export class TiktokBusiness implements INodeType {
 						description: 'Get info about images in an advertiser',
 						action: 'Get info about images',
 						routing: {
+							send: {
+								preSend: [async function (this: IExecuteSingleFunctions,
+									requestOptions: IHttpRequestOptions,
+								): Promise<IHttpRequestOptions> {
+									const authentication = this.getNodeParameter('authentication', 0) as AuthenticationType;
+									if (authentication === 'cookie') {
+										throw new NodeOperationError(this.getNode(), 'Not implemented yet');
+									}
+									return requestOptions;
+								}],
+							},
 							request: {
 								method: 'GET',
 								url: '/file/image/ad/info/',
@@ -307,13 +388,71 @@ export class TiktokBusiness implements INodeType {
 								preSend: [async function (this: IExecuteSingleFunctions,
 									requestOptions: IHttpRequestOptions,
 								): Promise<IHttpRequestOptions> {
-									const authentication = this.getNodeParameter('authentication', 0);
-									const credentialType = authentication === 'easyAuth' ? 'tiktokBusinessEasyAuthOAuth2Api' : 'tiktokBusinessOAuth2Api';
+									const authentication = this.getNodeParameter('authentication', 0) as AuthenticationType;
+									const credentialType = credentialByAuthentication[authentication];
 									const {baseUrl} = await this.getCredentials<{
 										baseUrl: string;
 									}>(credentialType);
+
 									requestOptions.headers = {
 										...requestOptions.headers,
+									}
+
+									const body = new FormData();
+
+									const advertiserId = this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string;
+									this.logger.debug(`advertiserId: ${advertiserId}`);
+									if (authentication === 'cookie') {
+										const credentialType = credentialByAuthentication[authentication];
+										const {csrfToken, sessionId} = await this.getCredentials<{
+											csrfToken: string;
+											sessionId: string;
+										}>(credentialType);
+										requestOptions.headers = {
+											...requestOptions.headers,
+											'x-csrftoken': csrfToken,
+											'Cookie': `csrftoken=${csrfToken}; sessionid_ss_ads=${sessionId};`,
+										};
+
+										this.logger.debug(`requestOptions.headers: ${JSON.stringify(requestOptions.headers)}`);
+
+										const isBinaryData = this.getNodeParameter('binaryData', false) as boolean;
+									  if (!isBinaryData) {
+											throw new NodeOperationError(this.getNode(), 'Binary data is required');
+										}
+										const binaryPropertyName = this.getNodeParameter('binaryPropertyName') as string;
+										if (!binaryPropertyName) {
+											throw new NodeOperationError(this.getNode(), 'Binary property name is required');
+										}
+
+										const binaryData = this.helpers.assertBinaryData(binaryPropertyName);
+										if (!binaryData) {
+											throw new NodeOperationError(this.getNode(), 'Binary data is required');
+										}
+
+										const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(binaryPropertyName);
+										const fileName = binaryData.fileName?.toString();
+										if (!fileName) {
+											throw new NodeOperationError(this.getNode(), `File name is needed to upload image. Make sure the property that holds the binary data has the file name property set.`);
+										}
+
+										requestOptions.url = 'https://ads.tiktok.com/mi/api/v2/i18n/material/image/upload/?req_src=ad_creation';
+										requestOptions.qs = {
+											req_src: 'ad_creation',
+											aadvid: advertiserId,
+										};
+										body.append('Filedata', binaryDataBuffer, {
+											filename: binaryData.fileName,
+											contentType: binaryData.mimeType,
+											knownLength: binaryDataBuffer.length,
+										});
+
+										// Remove json flag and let n8n handle content-type for multipart
+										requestOptions.json = false;
+										requestOptions.headers['Content-Length'] = body.getLengthSync();
+										requestOptions.headers['Content-Type'] = `multipart/related; boundary=${body.getBoundary()}`;
+										requestOptions.body = body;
+									  return requestOptions;
 									}
 									// const inputData = this.getInputData();
 									const additionalFields = this.getNodeParameter('additionalFields', {}) as any;
@@ -322,9 +461,7 @@ export class TiktokBusiness implements INodeType {
 										requestOptions.baseURL = baseUrl.replace('v1.3', `v${apiVersion}`);
 										this.logger.debug(`Set baseURL to: ${requestOptions.baseURL}`);
 									}
-
-									const body = new FormData();
-									body.append('advertiser_id', this.getNodeParameter('advertiserId', undefined, { extractValue: true }) as string);
+									body.append('advertiser_id', advertiserId);
 
 									const isBinaryData = this.getNodeParameter('binaryData', false) as boolean;
 									if (isBinaryData) {
@@ -366,8 +503,7 @@ export class TiktokBusiness implements INodeType {
 										// Remove json flag and let n8n handle content-type for multipart
 										requestOptions.json = false;
 										requestOptions.headers['Content-Length'] = body.getLengthSync();
-										requestOptions.headers['Content-Type'] =
-											`multipart/related; boundary=${body.getBoundary()}`;
+										requestOptions.headers['Content-Type'] = `multipart/related; boundary=${body.getBoundary()}`;
 									} else {
 										const fileIdOrUrl = this.getNodeParameter('fileIdOrUrl') as string;
 										if (!fileIdOrUrl) {
@@ -448,6 +584,9 @@ export class TiktokBusiness implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['creativeTool'],
+					},
+					hide: {
+						authentication: ['cookie'],
 					},
 				},
 				options: [
@@ -664,7 +803,7 @@ export class TiktokBusiness implements INodeType {
 				displayName: 'Binary File',
 				name: 'binaryData',
 				type: 'boolean',
-				default: false,
+				default: true,
 				required: true,
 				displayOptions: {
 					show: {
@@ -685,9 +824,7 @@ export class TiktokBusiness implements INodeType {
 				hint: 'The name of the input binary field containing the file to be written',
 				displayOptions: {
 					show: {
-						operation: [
-							'uploadImage',
-						],
+						operation: ['uploadImage'],
 						resource: ['image'],
 						binaryData: [true],
 					},
@@ -706,6 +843,9 @@ export class TiktokBusiness implements INodeType {
 						operation: ['uploadImage'],
 						resource: ['image'],
 						binaryData: [false],
+					},
+					hide: {
+						authentication: ['cookie'],
 					},
 				},
 				description:
@@ -755,6 +895,9 @@ export class TiktokBusiness implements INodeType {
 							'listImages',
 						],
 						resource: ['image'],
+					},
+					hide: {
+						authentication: ['cookie'],
 					},
 				},
 				default: {
@@ -820,8 +963,40 @@ export class TiktokBusiness implements INodeType {
 	methods = {
 		listSearch: {
 			searchAdvertisers: async function (this: ILoadOptionsFunctions) {
-				const authentication = this.getNodeParameter('authentication', 0);
-				const credentialType = authentication === 'easyAuth' ? 'tiktokBusinessEasyAuthOAuth2Api' : 'tiktokBusinessOAuth2Api';
+				const authentication = this.getNodeParameter('authentication', 0) as AuthenticationType;
+				const credentialType = credentialByAuthentication[authentication];
+
+				if (authentication === 'cookie') {
+					const { baseUrl, csrfToken, sessionId } = await this.getCredentials<{
+						baseUrl: string;
+						csrfToken: string;
+						sessionId: string;
+					}>(credentialType);
+					const response = await this.helpers.request({
+						baseURL: baseUrl,
+						method: 'GET',
+						url: 'https://ads.tiktok.com/api/v2/i18n/account/account_switch_list/',
+						headers: {
+							'x-csrftoken': csrfToken,
+							'Cookie': `csrftoken=${csrfToken}; sessionid_ss_ads=${sessionId};`,
+						},
+						json: true,
+					});
+					// this.logger.debug(`response: ${JSON.stringify(response)}`);
+					const data = response?.data?.data || [];
+					const child = data.reduce((acc: any, item: any) => {
+						acc.push(...item.child);
+						return acc;
+					}, []);
+					// this.logger.debug(`child: ${JSON.stringify(child)}`);
+					return {
+						results: child.map((item: any) => ({
+							name: item.name,
+							value: item.id,
+						})),
+					};
+				}
+
 				const { baseUrl, oauthTokenData, clientId, clientSecret, advertiserGetUrl } = await this.getCredentials<{
 					clientId: string;
 					clientSecret: string;
@@ -833,16 +1008,6 @@ export class TiktokBusiness implements INodeType {
 						scope: number[];
 					};
 				}>(credentialType);
-
-				/* // TODO: uncomment this when the oauthTokenData.advertiser_ids is correct
-				if (authentication === 'easyAuth') {
-					return {
-						results: oauthTokenData.advertiser_ids.map((item: string) => ({
-							name: item,
-							value: item,
-						})),
-					};
-				} */
 
 				const response = await this.helpers.request({
 					baseURL: baseUrl,
