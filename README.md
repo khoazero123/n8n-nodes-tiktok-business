@@ -51,6 +51,10 @@ This node supports two authentication methods:
 2. Provide the authorization URL, access token URL, and advertiser get URL
 3. This method is useful for custom OAuth2 implementations or when using pre-configured endpoints
 
+### Cookie Authentication
+1. Use the "TikTok Business Cookie API" credential type
+2. Provide the CSRF token and session ID
+
 **Prerequisites:**
 - A TikTok Business account
 - A registered application in the TikTok for Business Developer Portal
@@ -58,8 +62,8 @@ This node supports two authentication methods:
 
 ## Compatibility
 
-- **Minimum n8n version**: 1.0.0
-- **Tested with n8n versions**: 1.0.0+
+- **Minimum n8n version**: 1.100.0
+- **Tested with n8n versions**: 1.100.0+
 - **Node.js version**: 20.15+
 - **TikTok Business API versions**: v1.2, v1.3 (default)
 

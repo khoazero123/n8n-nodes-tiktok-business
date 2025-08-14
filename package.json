@@ -1,15 +1,20 @@
 {
   "name": "n8n-nodes-tiktok-business",
-  "version": "0.0.5",
-  "description": "n8n community node for interacting with TikTok",
+  "version": "0.0.6",
+  "description": "n8n community node for interacting with TikTok Business API",
   "keywords": [
-    "n8n-community-node-package"
+    "n8n-community-node-package",
+    "tiktok",
+    "tiktok-business",
+    "tiktok-business-api",
+    "tiktok-business-node",
+    "tiktok-business-node-package"
   ],
   "license": "MIT",
   "homepage": "",
   "author": {
-    "name": "TikTok Node Developer",
-    "email": "developer@example.com"
+    "name": "Freelancer",
+    "email": "megavn.net@gmail.com"
   },
   "repository": {
     "type": "git",
