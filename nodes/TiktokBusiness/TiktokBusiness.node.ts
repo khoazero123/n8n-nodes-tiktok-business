@@ -88,7 +88,7 @@ export class TiktokBusiness implements INodeType {
 						value: 'easyAuth',
 					},
 					{
-						name: 'Cookie',
+						name: 'Cookie (Experimental)',
 						value: 'cookie',
 					},
 				],

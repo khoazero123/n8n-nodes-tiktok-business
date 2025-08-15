@@ -7,7 +7,7 @@ export class TiktokBusinessEasyAuthOAuth2Api implements ICredentialType {
 
 	displayName = 'Tiktok Business Easy Auth OAuth2 API';
 
-	documentationUrl = 'https://business-api.tiktok.com/portal/docs?id=1832209711206401';
+	documentationUrl = 'https://ads.tiktok.com/';
 
 	icon: Icon = 'file:../nodes/TiktokBusiness/tiktokbusiness.svg';
 
@@ -46,31 +46,38 @@ export class TiktokBusinessEasyAuthOAuth2Api implements ICredentialType {
 			required: true,
 		},
 		{
+			displayName: 'Proxy Base URL',
+			name: 'proxyBaseUrl',
+			type: 'string',
+			default: 'https://oauth.tiktok-business.workers.dev',
+			required: true,
+		},
+		{
 			displayName: 'Authorization URL',
 			name: 'authUrl',
-			type: 'string',
-			default: '',
+			type: 'hidden',
+			default: '={{$self["proxyBaseUrl"]}}/auth',
 			required: true,
 		},
 		{
 			displayName: 'Access Token URL',
 			name: 'accessTokenUrl',
-			type: 'string',
+			type: 'hidden',
 			required: true,
-			default: '',
+			default: '={{$self["proxyBaseUrl"]}}/token',
 		},
 		{
 			displayName: 'Advertiser Get URL',
 			name: 'advertiserGetUrl',
-			type: 'string',
+			type: 'hidden',
 			required: true,
-			default: '',
+			default: '={{$self["proxyBaseUrl"]}}/advertiser/get/',
 		},
 		{
 			displayName: 'Auth URI Query Parameters',
 			name: 'authQueryParameters',
 			type: 'hidden',
-			default: '=n8n_oauth_redirect_uri={{process.env.WEBHOOK_URL?.endsWith("/") ? process.env.WEBHOOK_URL?.slice(0, -1) : process.env.WEBHOOK_URL}}{{ process.env.N8N_ENDPOINT_REST ? process.env.N8N_ENDPOINT_REST : "/rest" }}/oauth2-credential/callback',
+			default: '',
 		},
 		{
 			displayName: 'Authentication',
