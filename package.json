@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-tiktok-business",
-  "version": "0.0.7",
+  "version": "0.0.9",
   "description": "n8n community node for interacting with TikTok Business API",
   "keywords": [
     "n8n-community-node-package",
@@ -39,7 +39,8 @@
     "n8nNodesApiVersion": 1,
     "credentials": [
       "dist/credentials/TiktokBusinessOAuth2Api.credentials.js",
-      "dist/credentials/TiktokBusinessEasyAuthOAuth2Api.credentials.js"
+      "dist/credentials/TiktokBusinessEasyAuthOAuth2Api.credentials.js",
+      "dist/credentials/TiktokBusinessCookieApi.credentials.js"
     ],
     "nodes": [
       "dist/nodes/TiktokBusiness/TiktokBusiness.node.js"

@@ -99,11 +99,6 @@ export class TiktokBusiness implements INodeType {
 				name: 'credentials',
 				type: 'credentials',
 				default: '',
-				displayOptions: {
-					show: {
-						authentication: ['oAuth2', 'easyAuth', 'cookie'],
-					},
-				},
 			},
 			{
 				displayName: 'Resource',
@@ -138,7 +133,6 @@ export class TiktokBusiness implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['user'],
-						authentication: ['oAuth2', 'easyAuth', 'cookie'],
 					},
 				},
 				options: [
