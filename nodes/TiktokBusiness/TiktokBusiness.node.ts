@@ -1037,8 +1037,10 @@ export class TiktokBusiness implements INodeType {
 						app_id: clientId,
 						secret: clientSecret,
 					},
+					json: true,
 				});
-				const advertisers = JSON.parse(response)?.data?.list || [];
+				// this.logger.debug(`response: ${JSON.stringify(response)}`);
+				const advertisers = response?.data?.list || [];
 				return {
 					results: advertisers.map((item: any) => ({
 						name: item.advertiser_name,
