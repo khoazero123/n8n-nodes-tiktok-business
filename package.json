@@ -13,12 +13,12 @@
   "license": "MIT",
   "homepage": "",
   "author": {
-    "name": "Freelancer",
-    "email": "megavn.net@gmail.com"
+    "name": "KhoaZero123",
+    "email": "khoazero123@gmail.com"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/megavnet/n8n-nodes-tiktok-business.git"
+    "url": "https://github.com/khoazero123/n8n-nodes-tiktok-business.git"
   },
   "engines": {
     "node": ">=20.15"
